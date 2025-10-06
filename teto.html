@@ -3,8 +3,39 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Web Tetris Clone</title>
-    <link rel="stylesheet" href="style.css">
+    <title>Web Tetris Clone (Single File)</title>
+    
+    <style>
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #333;
+            color: #eee;
+            font-family: sans-serif;
+        }
+
+        .game-container {
+            text-align: center;
+            border: 5px solid #fff;
+            padding: 20px;
+            background-color: #222;
+            border-radius: 10px;
+        }
+
+        h1 {
+            margin-top: 0;
+            color: #0ff;
+        }
+
+        #gameCanvas {
+            display: block;
+            border: 1px solid #aaa;
+            background-color: #111;
+        }
+    </style>
 </head>
 <body>
     <div class="game-container">
@@ -14,7 +45,282 @@
         <canvas id="gameCanvas" width="200" height="400"></canvas>
     </div>
     
-    <script src="game.js"></script>
+    <script>
+        // --- 1. 基本設定と初期化 ---
+        const COLS = 10;
+        const ROWS = 20;
+        const BLOCK_SIZE = 20;
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+
+        canvas.width = COLS * BLOCK_SIZE;
+        canvas.height = ROWS * BLOCK_SIZE;
+
+        let board;
+        let score;
+        let gameOver;
+        let isGameStarted; 
+        let isPaused; 
+
+        // ブロックの形と色 (テトロミノ)
+        const TETROMINOS = [
+            null, 
+            {shape: [[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]], color: 'cyan'}, // I
+            {shape: [[2,0,0], [2,2,2], [0,0,0]], color: 'blue'}, // J
+            {shape: [[0,0,3], [3,3,3], [0,0,0]], color: 'orange'}, // L
+            {shape: [[4,4], [4,4]], color: 'yellow'}, // O
+            {shape: [[0,5,5], [5,5,0], [0,0,0]], color: 'lime'}, // S
+            {shape: [[0,6,0], [6,6,6], [0,0,0]], color: 'purple'}, // T
+            {shape: [[7,7,0], [0,7,7], [0,0,0]], color: 'red'} // Z
+        ];
+
+        let currentBlock;
+
+        // --- 2. 状態管理と初期化 ---
+
+        function resetGame() {
+            board = Array(ROWS).fill(0).map(() => Array(COLS).fill(0));
+            score = 0;
+            scoreElement.textContent = score;
+            gameOver = false;
+            isGameStarted = false;
+            isPaused = false;
+            generateNewBlock();
+            
+            drawBoard();
+            drawCurrentBlock();
+        }
+
+        // --- 3. ブロック関連関数 ---
+
+        function generateNewBlock() {
+            const type = Math.floor(Math.random() * 7) + 1;
+            currentBlock = JSON.parse(JSON.stringify(TETROMINOS[type]));
+            currentBlock.x = Math.floor(COLS / 2) - Math.floor(currentBlock.shape[0].length / 2);
+            currentBlock.y = 0;
+            currentBlock.id = type;
+
+            if (!isValidMove(currentBlock.shape, currentBlock.x, currentBlock.y)) {
+                gameOver = true;
+            }
+        }
+
+        function isValidMove(shape, x, y) {
+            for (let r = 0; r < shape.length; r++) {
+                for (let c = 0; c < shape[r].length; c++) {
+                    if (shape[r][c]) {
+                        const newX = x + c;
+                        const newY = y + r;
+
+                        if (newX < 0 || newX >= COLS || newY >= ROWS) {
+                            return false;
+                        }
+                        if (newY >= 0 && board[newY][newX] !== 0) {
+                            return false;
+                        }
+                    }
+                }
+            }
+            return true;
+        }
+
+        function lockBlock() {
+            currentBlock.shape.forEach((row, r) => {
+                row.forEach((value, c) => {
+                    if (value) {
+                        if (currentBlock.y + r >= 0) {
+                            board[currentBlock.y + r][currentBlock.x + c] = currentBlock.id;
+                        }
+                    }
+                });
+            });
+
+            checkLines();
+            generateNewBlock();
+        }
+
+        function rotate(shape) {
+            const N = shape.length;
+            const newShape = Array(N).fill(0).map(() => Array(N).fill(0));
+            for (let r = 0; r < N; r++) {
+                for (let c = 0; c < N; c++) {
+                    newShape[c][N - 1 - r] = shape[r][c];
+                }
+            }
+            return newShape;
+        }
+
+        // --- 4. ライン消去とスコアリング ---
+
+        function checkLines() {
+            let linesCleared = 0;
+            for (let r = ROWS - 1; r >= 0; r--) {
+                if (board[r].every(cell => cell !== 0)) {
+                    linesCleared++;
+                    board.splice(r, 1);
+                    board.unshift(Array(COLS).fill(0));
+                    r++; 
+                }
+            }
+
+            if (linesCleared > 0) {
+                score += [0, 100, 300, 500, 800][linesCleared];
+                scoreElement.textContent = score;
+            }
+        }
+
+        // --- 5. 描画関数 ---
+
+        function drawSquare(x, y, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+            ctx.strokeStyle = '#222';
+            ctx.strokeRect(x * BLOCK_SIZE, y * BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
+        }
+
+        function drawBoard() {
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLS; c++) {
+                    const blockId = board[r][c];
+                    if (blockId !== 0) {
+                        drawSquare(c, r, TETROMINOS[blockId].color);
+                    }
+                }
+            }
+        }
+
+        function drawCurrentBlock() {
+            if (!currentBlock) return;
+            
+            currentBlock.shape.forEach((row, r) => {
+                row.forEach((value, c) => {
+                    if (value) {
+                        drawSquare(currentBlock.x + c, currentBlock.y + r, currentBlock.color);
+                    }
+                });
+            });
+        }
+
+        function displayMessage(text, subtext = '') {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; // 半透明の背景
+            ctx.fillRect(0, canvas.height / 2 - 50, canvas.width, 100);
+            
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(text, canvas.width / 2, canvas.height / 2 - 10);
+            
+            if (subtext) {
+                ctx.font = '14px Arial';
+                ctx.fillText(subtext, canvas.width / 2, canvas.height / 2 + 15);
+            }
+        }
+
+        // --- 6. ゲームループと操作 ---
+
+        let dropCounter = 0;
+        let dropInterval = 1000;
+        let lastTime = 0;
+
+        function gameLoop(time = 0) {
+            drawBoard();
+            drawCurrentBlock();
+            
+            if (gameOver) {
+                displayMessage('GAME OVER', 'Press ENTER to Restart');
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+            
+            if (!isGameStarted || isPaused) {
+                if (!isGameStarted) {
+                    displayMessage('Press ENTER to Start');
+                } else if (isPaused) {
+                    displayMessage('PAUSED', 'ENTER: Resume / ESC: Reset');
+                }
+                requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            const deltaTime = time - lastTime;
+            lastTime = time;
+
+            dropCounter += deltaTime;
+
+            if (dropCounter > dropInterval) {
+                if (isValidMove(currentBlock.shape, currentBlock.x, currentBlock.y + 1)) {
+                    currentBlock.y++;
+                } else {
+                    lockBlock();
+                }
+                dropCounter = 0;
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // キーボード操作
+        document.addEventListener('keydown', event => {
+            // GameOver時のEnterキー処理
+            if (gameOver && event.key === 'Enter') {
+                resetGame();
+                return;
+            }
+
+            if (gameOver) return;
+            
+            // Escapeキーの処理: 一時停止/リセット
+            if (event.key === 'Escape') {
+                if (!isGameStarted) return; 
+
+                if (isPaused) {
+                    resetGame();
+                } else {
+                    isPaused = true;
+                }
+                return;
+            }
+
+            // Enterキーの処理: 開始/再開
+            if (event.key === 'Enter') {
+                if (!isGameStarted) {
+                    isGameStarted = true;
+                } else if (isPaused) {
+                    isPaused = false;
+                }
+                return;
+            }
+            
+            if (!isGameStarted || isPaused) return; 
+
+            // 通常のゲーム操作の処理
+            if (event.key === 'ArrowLeft') {
+                if (isValidMove(currentBlock.shape, currentBlock.x - 1, currentBlock.y)) currentBlock.x--;
+            } else if (event.key === 'ArrowRight') {
+                if (isValidMove(currentBlock.shape, currentBlock.x + 1, currentBlock.y)) currentBlock.x++;
+            } else if (event.key === 'ArrowDown') {
+                if (isValidMove(currentBlock.shape, currentBlock.x, currentBlock.y + 1)) {
+                    currentBlock.y++;
+                    score += 1;
+                    dropCounter = 0;
+                }
+            } else if (event.key === 'ArrowUp') {
+                const newShape = rotate(currentBlock.shape);
+                if (isValidMove(newShape, currentBlock.x, currentBlock.y)) {
+                    currentBlock.shape = newShape;
+                }
+            }
+        });
+
+        // --- 7. ゲーム開始 ---
+        resetGame();
+        gameLoop(); 
+    </script>
 </body>
 </html>
 
