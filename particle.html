@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>【静止時も発光】カラフル・パーティクル</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000000;
+        }
+        #particle-canvas {
+            display: block;
+            cursor: none;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="particle-canvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('particle-canvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        let mouseX = window.innerWidth / 2; // 初期値を画面中央に設定
+        let mouseY = window.innerHeight / 2; // 初期値を画面中央に設定
+        let hue = 0; 
+        
+        // --- 変更点：常に生成する粒子の数を設定 ---
+        const ANIMATE_PARTICLE_COUNT = 3; // 1フレームごとに常に生成する粒子の数
+        const BURST_PARTICLE_COUNT = 50; 
+        // ------------------------------------------
+
+        // キャンバスのサイズ設定
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // --- 変更点：mousemoveでは座標の更新のみを行う ---
+        document.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+
+        // クリックイベントリスナー：バーストエフェクト
+        document.addEventListener('click', (e) => {
+            const clickX = e.clientX;
+            const clickY = e.clientY;
+            
+            // バースト用のパーティクルを大量に生成
+            for (let i = 0; i < BURST_PARTICLE_COUNT; i++) {
+                // 円形の粒子エフェクトに戻しています
+                particles.push(new Particle(clickX, clickY, hue, 'burst'));
+            }
+            // バースト時も色相を更新
+            hue = (hue + 30) % 360;
+        });
+
+
+        // パーティクル（点）のクラス
+        class Particle {
+            constructor(x, y, hue, type) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
+
+                if (type === 'burst') {
+                    const angle = Math.random() * Math.PI * 2;
+                    const speed = Math.random() * 8 + 3; 
+                    this.vx = Math.cos(angle) * speed;
+                    this.vy = Math.sin(angle) * speed;
+                    this.radius = Math.random() * 6 + 1; // 1～7の範囲
+                    this.alpha = 1;
+                    this.gravity = 0.2; 
+                } else { // 'trail' (静止時含む) 用
+                    // 静止時でもフワッと広がるように、速度は維持
+                    this.vx = (Math.random() - 0.5) * 0.5; 
+                    this.vy = (Math.random() - 0.5) * 0.5; 
+                    this.radius = Math.random() * 1.5 + 0.5; // 0.5～2の範囲
+                    this.alpha = 1; 
+                    this.gravity = 0;
+                }
+                
+                this.color = `hsl(${hue}, 100%, 70%)`; // カラフルな色指定を復活
+                this.friction = 0.99; 
+            }
+
+            // パーティクルを更新
+            update() {
+                this.vx *= this.friction;
+                this.vy *= this.friction;
+                
+                this.vy += this.gravity;
+
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                const fadeRate = (this.type === 'burst') ? 0.03 : 0.015;
+                this.alpha -= fadeRate; 
+                this.radius *= 0.98;
+            }
+
+            // パーティクルを描画 (円形粒子に戻す)
+            draw() {
+                ctx.save();
+                ctx.globalAlpha = this.alpha;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // メインの描画ループ
+        function animate() {
+            requestAnimationFrame(animate);
+
+            // --- 変更点：このループ内で常に粒子を生成 ---
+            for (let i = 0; i < ANIMATE_PARTICLE_COUNT; i++) {
+                particles.push(new Particle(mouseX, mouseY, hue, 'trail'));
+            }
+            // 色相もここで更新し続けます
+            hue = (hue + 5) % 360; 
+            // ------------------------------------------
+
+            // 残像表現
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.15)'; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // パーティクルの更新と描画
+            particles.forEach((particle, index) => {
+                particle.update();
+                particle.draw();
+
+                // 透明度が低くなったパーティクルを配列から削除
+                if (particle.alpha < 0.05) {
+                    particles.splice(index, 1);
+                }
+            });
+        }
+
+        animate();
+    </script>
+</body>
+</html>
