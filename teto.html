@@ -64,19 +64,25 @@
         let isGameStarted; 
         let isPaused; 
 
-        // ブロックの形と色 (テトロミノ)
-        const TETROMINOS = [
-            null, 
-            {shape: [[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]], color: 'cyan'}, // I
-            {shape: [[2,0,0], [2,2,2], [0,0,0]], color: 'blue'}, // J
-            {shape: [[0,0,3], [3,3,3], [0,0,0]], color: 'orange'}, // L
-            {shape: [[4,4], [4,4]], color: 'yellow'}, // O
-            {shape: [[0,5,5], [5,5,0], [0,0,0]], color: 'lime'}, // S
-            {shape: [[0,6,0], [6,6,6], [0,0,0]], color: 'purple'}, // T
-            {shape: [[7,7,0], [0,7,7], [0,0,0]], color: 'red'} // Z
-        ];
+     // ブロックの形と色 (テトロミノ + ペントミノの例)
+const TETROMINOS = [
+    null, 
+    // --- 既存のテトロミノ (4マス) ---
+    {shape: [[0,0,0,0], [1,1,1,1], [0,0,0,0], [0,0,0,0]], color: 'cyan'},   // 1: I
+    {shape: [[2,0,0], [2,2,2], [0,0,0]], color: 'blue'},                     // 2: J
+    {shape: [[0,0,3], [3,3,3], [0,0,0]], color: 'orange'},                   // 3: L
+    {shape: [[4,4], [4,4]], color: 'yellow'},                               // 4: O
+    {shape: [[0,5,5], [5,5,0], [0,0,0]], color: 'lime'},                     // 5: S
+    {shape: [[0,6,0], [6,6,6], [0,0,0]], color: 'purple'},                   // 6: T
+    {shape: [[7,7,0], [0,7,7], [0,0,0]], color: 'red'},                      // 7: Z
 
-        let currentBlock;
+    // --- 新しいペントミノ (5マス) ---
+    {shape: [[8,0,8], [8,8,8], [0,0,0]], color: 'brown'},                    // 8: U (3x3)
+    {shape: [[0,9,9], [9,0,9], [0,9,0]], color: 'magenta'},                  // 9: F (3x3)
+    {shape: [[10,10,0], [0,10,0], [0,10,0], [0,10,0]], color: 'gold'},       // 10: P-like (4x3) ※4x4の定義に合わせて調整
+];
+
+let currentBlock;
 
         // --- 2. 状態管理と初期化 ---
 
