@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ミニ・テトリス（多様なブロック）</title>
+    <style>
+        /* ゲームボードのスタイル */
+        canvas {
+            border: 5px solid #333; /* 枠線 */
+            background-color: #000;
+            display: block; /* 中央揃えのために必要 */
+            margin: 20px auto;
+        }
+
+        /* 全体の情報エリアのスタイル */
+        #game-area {
+            max-width: 200px;
+            margin: 0 auto;
+            text-align: center;
+            position: relative; /* PAUSE表示のために必要 */
+        }
+
+        #game-info {
+            font-family: 'Arial', sans-serif;
+            margin-top: 10px;
+            padding: 10px;
+            border: 1px solid #eee;
+            background-color: #f9f9f9;
+        }
+
+        h1 {
+            text-align: center;
+            font-family: 'Arial', sans-serif;
+        }
+
+        p {
+            margin: 5px 0;
+        }
+
+        /* 一時停止時の表示スタイル */
+        #pause-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 400px; /* canvasの高さに合わせる */
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            display: none; /* 初期状態では非表示 */
+            align-items: center;
+            justify-content: center;
+        }
+    </style>
+</head>
+<body>
+    <h1>ミニ・テトリス（多様なブロック）</h1>
+    <div id="game-area">
+        <canvas id="tetris-canvas" width="200" height="400"></canvas>
+        <div id="pause-overlay">PAUSE</div>
+
+        <div id="game-info">
+            <p>スコア: <span id="score">0</span></p>
+            <p>操作方法: **← → ↓** (移動), **Shift** (回転), **スペース** (落下), **Esc** (一時停止)</p>
+        </div>
+    </div>
+
+    <script>
+        // --- ゲーム設定 ---
+        const CANVAS = document.getElementById('tetris-canvas');
+        const CONTEXT = CANVAS.getContext('2d');
+        const SCORE_ELEMENT = document.getElementById('score');
+        const PAUSE_OVERLAY = document.getElementById('pause-overlay');
+
+        const GRID_SIZE = 20; // 1マスのサイズ（ピクセル）
+        const COLUMNS = 10;   // 盤面の列数
+        const ROWS = 20;      // 盤面の行数
+
+        // --- ブロックの形状と色 ---
+
+        // 4マスのブロック (テトリミノ)
+        const TETROMINOES = [
+            { shape: [[1, 1, 1, 1]], color: 'cyan' },     // I
+            { shape: [[1, 1], [1, 1]], color: 'yellow' }, // O
+            { shape: [[0, 1, 0], [1, 1, 1]], color: 'purple' }, // T
+            { shape: [[1, 1, 0], [0, 1, 1]], color: 'green' }, // S
+            { shape: [[0, 1, 1], [1, 1, 0]], color: 'red' },   // Z
+            { shape: [[1, 0, 0], [1, 1, 1]], color: 'blue' },  // J
+            { shape: [[0, 0, 1], [1, 1, 1]], color: 'orange' } // L
+        ];
+
+        // 3マスのブロック (トリオミノ)
+        const TRIOMINOES = [
+            { shape: [[1, 1, 1]], color: 'lime' },         // 棒
+            { shape: [[1, 0], [1, 1]], color: 'gold' },    // L字
+            { shape: [[0, 1], [1, 1]], color: 'salmon' }   // T字
+        ];
+
+        // 2マスのブロック (ドミノ)
+        const DOMINOES = [
+            { shape: [[1, 1]], color: 'white' }           // 棒
+        ];
+
+        // 全てのブロックを統合
+        const ALL_BLOCKS = TETROMINOES.concat(TRIOMINOES).concat(DOMINOES);
+
+
+        // --- ゲーム状態 ---
+        let board = [];
+        let currentTetromino;
+        let currentX = 3;
+        let currentY = 0;
+        let score = 0;
+        let dropCounter = 0;
+        let dropInterval = 1000; // 1秒ごとに落下
+        let isPaused = false; // 一時停止の状態を管理
+        let animationFrameId = null; // requestAnimationFrame のIDを保持
+
+        // --- 関数定義 ---
+
+        // 盤面の初期化
+        function initializeBoard() {
+            for (let r = 0; r < ROWS; r++) {
+                board[r] = new Array(COLUMNS).fill(0); // 0は空きマス
+            }
+        }
+
+        // 新しいテトリミノを生成
+        function createTetromino() {
+            const randIndex = Math.floor(Math.random() * ALL_BLOCKS.length);
+            const { shape, color } = ALL_BLOCKS[randIndex];
+            currentTetromino = { shape, color };
+            
+            // ブロックの幅に応じてスタート位置を調整
+            const blockWidth = shape[0].length;
+            currentX = Math.floor((COLUMNS - blockWidth) / 2); // 盤面中央に配置
+            currentY = 0;
+
+            // ゲームオーバー判定
+            if (checkCollision(0, 0, currentTetromino.shape)) {
+                alert('ゲームオーバー！ スコア: ' + score);
+                initializeBoard();
+                score = 0;
+                updateScore();
+            }
+        }
+
+        // 衝突判定
+        function checkCollision(dx, dy, shape) {
+            for (let y = 0; y < shape.length; y++) {
+                for (let x = 0; x < shape[y].length; x++) {
+                    if (shape[y][x]) {
+                        const newX = currentX + x + dx;
+                        const newY = currentY + y + dy;
+
+                        // 1. 横の壁
+                        if (newX < 0 || newX >= COLUMNS) {
+                            return true;
+                        }
+                        // 2. 底
+                        if (newY >= ROWS) {
+                            return true;
+                        }
+                        // 3. 盤面内の既存のブロック (マイナス行は無視)
+                        if (newY >= 0 && board[newY][newX]) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
+        }
+
+        // ブロックを盤面に固定
+        function solidifyTetromino() {
+            for (let y = 0; y < currentTetromino.shape.length; y++) {
+                for (let x = 0; x < currentTetromino.shape[y].length; x++) {
+                    if (currentTetromino.shape[y][x]) {
+                        const boardX = currentX + x;
+                        const boardY = currentY + y;
+                        if (boardY >= 0) {
+                            board[boardY][boardX] = currentTetromino.color;
+                        }
+                    }
+                }
+            }
+            clearLines();
+            createTetromino();
+        }
+
+        // ラインの消去
+        function clearLines() {
+            let linesCleared = 0;
+            for (let r = ROWS - 1; r >= 0; r--) {
+                if (board[r].every(cell => cell !== 0)) {
+                    board.splice(r, 1);
+                    board.unshift(new Array(COLUMNS).fill(0));
+                    linesCleared++;
+                    r++;
+                }
+            }
+
+            if (linesCleared > 0) {
+                // スコア計算 (例: 10, 30, 60, 100)
+                score += [0, 10, 30, 60, 100][linesCleared];
+                updateScore();
+            }
+        }
+
+        // スコア表示の更新
+        function updateScore() {
+            SCORE_ELEMENT.innerText = score;
+        }
+
+        // テトリミノの回転 (行列の変換)
+        function rotateTetromino() {
+            const shape = currentTetromino.shape;
+            const N = shape.length;
+
+            // 正方形ブロック (2x2) は回転しない
+            if (N === 2 && shape[0].length === 2 && shape[0][0] === 1 && shape[0][1] === 1) return;
+            // 2マス棒ブロック (1x2) は回転しない
+            if (N === 1 && shape[0].length === 2) return;
+            
+
+            // 新しい形状を生成
+            let newShape = [];
+            // Nは縦の長さだが、回転後の横の長さになるため、回転後の形状のサイズを決定する
+            const M = shape[0].length; // 横の長さ
+            let rotatedShape = Array(M).fill(0).map(() => Array(N).fill(0));
+
+
+            for (let i = 0; i < N; i++) {
+                for (let j = 0; j < M; j++) {
+                    // ここで90度時計回りに回転
+                    rotatedShape[j][N - 1 - i] = shape[i][j];
+                }
+            }
+            
+            // 形状の行と列の数が変化した場合に対応
+            newShape = rotatedShape.map(row => row.filter(cell => cell !== undefined));
+
+
+            // 回転後の衝突判定。衝突しない場合のみ形状を更新する。
+            if (!checkCollision(0, 0, newShape)) {
+                currentTetromino.shape = newShape;
+            }
+        }
+
+        // --- 描画処理 ---
+
+        // 1マスを描画
+        function drawSquare(x, y, color) {
+            CONTEXT.fillStyle = color;
+            CONTEXT.fillRect(x * GRID_SIZE, y * GRID_SIZE, GRID_SIZE - 1, GRID_SIZE - 1);
+        }
+
+        // 全てを描画
+        function draw() {
+            // 盤面をクリア
+            CONTEXT.clearRect(0, 0, CANVAS.width, CANVAS.height);
+
+            // 既に固定されたブロックを描画
+            for (let r = 0; r < ROWS; r++) {
+                for (let c = 0; c < COLUMNS; c++) {
+                    if (board[r][c]) {
+                        drawSquare(c, r, board[r][c]);
+                    }
+                }
+            }
+
+            // 現在操作中のテトリミノを描画
+            if (currentTetromino) {
+                const { shape, color } = currentTetromino;
+                for (let y = 0; y < shape.length; y++) {
+                    // 行が存在するかチェック（不揃いな配列に対応するため）
+                    if (!shape[y]) continue; 
+                    for (let x = 0; x < shape[y].length; x++) {
+                        if (shape[y][x]) {
+                            drawSquare(currentX + x, currentY + y, color);
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- ゲームループ ---
+        let lastTime = 0;
+        function gameLoop(time = 0) {
+            if (isPaused) {
+                animationFrameId = requestAnimationFrame(gameLoop);
+                return;
+            }
+
+            const deltaTime = time - lastTime;
+            lastTime = time;
+
+            // ブロックの自動落下制御
+            dropCounter += deltaTime;
+            if (dropCounter > dropInterval) {
+                drop();
+            }
+
+            draw();
+            animationFrameId = requestAnimationFrame(gameLoop);
+        }
+
+        // ブロックの落下処理
+        function drop() {
+            if (!checkCollision(0, 1, currentTetromino.shape)) {
+                currentY++;
+            } else {
+                solidifyTetromino();
+            }
+            dropCounter = 0;
+        }
+
+        // 一時停止機能のトグル
+        function togglePause() {
+            isPaused = !isPaused;
+            if (isPaused) {
+                // 一時停止
+                PAUSE_OVERLAY.style.display = 'flex';
+            } else {
+                // 再開
+                PAUSE_OVERLAY.style.display = 'none';
+                lastTime = performance.now(); // タイマーをリセットして落下遅延を解消
+                gameLoop();
+            }
+        }
+
+        // --- キー操作の処理 ---
+        document.addEventListener('keydown', e => {
+            // Escapeキーは一時停止/再開
+            if (e.key === 'Escape') {
+                togglePause();
+                return;
+            }
+
+            // 一時停止中は他のキー操作を無視
+            if (isPaused || !currentTetromino) return;
+
+            if (e.key === 'ArrowLeft') {
+                if (!checkCollision(-1, 0, currentTetromino.shape)) currentX--;
+            } else if (e.key === 'ArrowRight') {
+                if (!checkCollision(1, 0, currentTetromino.shape)) currentX++;
+            } else if (e.key === 'ArrowDown') {
+                drop();
+            } else if (e.key === 'Shift') { 
+                e.preventDefault(); // Shiftキーによるブラウザのデフォルト動作を防止
+                rotateTetromino(); // 回転
+            } else if (e.key === ' ') {
+                e.preventDefault(); // スペースキーによるスクロールを防止
+                // スペースキーで一気に落下
+                while (!checkCollision(0, 1, currentTetromino.shape)) {
+                    currentY++;
+                }
+                drop();
+            }
+        });
+
+        // --- ゲーム開始 ---
+        initializeBoard();
+        createTetromino();
+        gameLoop();
+    </script>
+</body>
+</html>
